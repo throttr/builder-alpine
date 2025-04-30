@@ -30,7 +30,7 @@ jobs:
         with:
           platforms: linux/amd64,linux/arm64
           push: ${{ github.ref == 'refs/heads/master' }}
-          tags: ghcr.io/throttr/builder:${{ matrix.version }}-${{ matrix.variant }}
+          tags: ghcr.io/throttr/builder-alpine:${{ matrix.version }}-${{ matrix.variant }}
           build-args: |
             BOOST_VERSION=${{ matrix.version }}
             BOOST_VARIANT=${{ matrix.variant }}
