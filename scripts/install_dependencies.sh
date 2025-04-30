@@ -21,6 +21,8 @@ apk add --no-cache \
     supervisor \
     openssl-dev \
     zlib-dev \
+    zlib-static \
+    zstd-static \
     libcurl \
     curl-dev \
     protobuf-dev \
