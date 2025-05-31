@@ -55,7 +55,6 @@ jobs:
           build-args: |
             BOOST_VERSION=${{ matrix.version }}
             BOOST_VARIANT=${{ matrix.variant }}
-          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha
