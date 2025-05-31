@@ -51,6 +51,8 @@ jobs:
             BOOST_VERSION=${{ matrix.version }}
             BOOST_VARIANT=${{ matrix.variant }}
           outputs: type=image,push-by-digest=true,name-canonical=true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Export digest
         run: |
