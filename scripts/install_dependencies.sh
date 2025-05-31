@@ -55,5 +55,6 @@ git checkout tags/0.8.5
 git submodule update --init --recursive
 cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_SHARED_LIBS=OFF -DSENTRY_BACKEND=crashpad
 cmake --build build --parallel
+cmake --install build --config RelWithDebInfo
 cd ..
 rm sentry -Rf
