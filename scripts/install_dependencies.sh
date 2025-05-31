@@ -31,7 +31,29 @@ apk add --no-cache \
     graphviz \
     rsync \
     gcovr \
-    lcov
+    lcov \
+    autoconf \
+    automake \
+    libtool \
+    m4
 
 ln -sf /usr/share/zoneinfo/${TZ:-UTC} /etc/localtime
 echo "${TZ:-UTC}" > /etc/timezone
+
+git clone https://github.com/libunwind/libunwind.git
+cd libunwind
+autoreconf -i
+./configure --enable-static --disable-shared
+make -j$(nproc)
+make install
+cd ..
+rm libunwind -Rf
+
+git clone https://github.com/getsentry/sentry-native.git sentry
+cd sentry
+git checkout tags/0.8.5
+git submodule update --init --recursive
+cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_SHARED_LIBS=OFF -DSENTRY_BACKEND=crashpad
+cmake --build build --parallel
+cd ..
+rm sentry -Rf

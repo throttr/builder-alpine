@@ -2,35 +2,103 @@ name: Continuous Integration
 
 on: [push]
 
+env:
+  VERSION: ${{ github.ref_name }}
+  REGISTRY_IMAGE: ghcr.io/throttr/builder-alpine
+
 jobs:
   build:
     name: Build
     strategy:
+      fail-fast: false
       matrix:
         version: [1.87.0]
         variant: [debug, release]
-    runs-on: ubuntu-latest
+        platform: [linux/amd64, linux/arm64]
+
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-22.04-arm' || 'ubuntu-latest' }}
+
     steps:
-      -
-        name: Set up QEMU
+      - uses: actions/checkout@v4
+
+      - name: Set platform name
+        run: |
+          PLATFORM="${{ matrix.platform }}"
+          PLATFORM_PAIR="${PLATFORM////-}"
+          echo "PLATFORM_PAIR=$PLATFORM_PAIR" >> $GITHUB_ENV
+
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-      -
-        name: Set up Docker Buildx
+
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      -
-        name: Login to GitHub Container Registry
+
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ secrets.GHCR_USERNAME }}
           password: ${{ secrets.GHCR_PAT }}
-      -
-        name: Build and push
+
+      - name: Build and push image
+        id: build
         uses: docker/build-push-action@v6
         with:
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.ref == 'refs/heads/master' }}
-          tags: ghcr.io/throttr/builder-alpine:${{ matrix.version }}-${{ matrix.variant }}
+          context: .
+          platforms: ${{ matrix.platform }}
+          tags: ${{ env.REGISTRY_IMAGE }}:${{ matrix.version }}-${{ matrix.variant }}
           build-args: |
             BOOST_VERSION=${{ matrix.version }}
             BOOST_VARIANT=${{ matrix.variant }}
+          outputs: type=image,push-by-digest=true,name-canonical=true
+
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          echo "${{ env.REGISTRY_IMAGE }}@${digest}" > "${{ runner.temp }}/digests/${{ matrix.version }}-${{ matrix.variant }}-${{ env.PLATFORM_PAIR }}.txt"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.version }}-${{ matrix.variant }}-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Merge manifests
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref_type == 'tag' || github.ref_name == 'master'
+
+    steps:
+      - name: Download all digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Group and create manifests
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          for combo in $(ls | cut -d'-' -f1,2 | sort -u); do
+            echo "::group::Creating manifest for $combo"
+            digests=$(ls digests-${combo}-* | xargs cat | tr '\n' ' ')
+            docker buildx imagetools create \
+              $digests \
+              -t ${{ env.REGISTRY_IMAGE }}:${combo}
+            docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${combo}
+            echo "::endgroup::"
+          done
