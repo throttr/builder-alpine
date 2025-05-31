@@ -9,7 +9,7 @@ wget https://archives.boost.io/release/$BOOST_VERSION/source/boost_$BOOST_VERSIO
 tar -xf boost_$BOOST_VERSION_DASH.tar.gz
 
 cd boost_$BOOST_VERSION_DASH
-sh bootstrap.sh --with-libraries=all
+sh bootstrap.sh --with-libraries=system,uuid,program_options,multi_index
 
 ./b2 install $BOOST_VARIANT variant=$BOOST_VARIANT debug-symbols=on link=static runtime-link=static optimization=speed --without-python -j 4
 

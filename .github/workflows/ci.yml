@@ -3,7 +3,6 @@ name: Continuous Integration
 on: [push]
 
 env:
-  VERSION: ${{ github.ref_name }}
   REGISTRY_IMAGE: ghcr.io/throttr/builder-alpine
 
 jobs:
@@ -21,11 +20,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set platform name
+      - name: Set platform pair
         run: |
-          PLATFORM="${{ matrix.platform }}"
-          PLATFORM_PAIR="${PLATFORM////-}"
-          echo "PLATFORM_PAIR=$PLATFORM_PAIR" >> $GITHUB_ENV
+          platform=${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=raw,value=${{ matrix.version }}-${{ matrix.variant }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -40,17 +46,18 @@ jobs:
           username: ${{ secrets.GHCR_USERNAME }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Build and push image
+      - name: Build and push
         id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          tags: ${{ env.REGISTRY_IMAGE }}:${{ matrix.version }}-${{ matrix.variant }}
           build-args: |
             BOOST_VERSION=${{ matrix.version }}
             BOOST_VARIANT=${{ matrix.variant }}
-          outputs: type=image,push-by-digest=true,name-canonical=true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -58,7 +65,7 @@ jobs:
         run: |
           mkdir -p ${{ runner.temp }}/digests
           digest="${{ steps.build.outputs.digest }}"
-          echo "${{ env.REGISTRY_IMAGE }}@${digest}" > "${{ runner.temp }}/digests/${{ matrix.version }}-${{ matrix.variant }}-${{ env.PLATFORM_PAIR }}.txt"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
 
       - name: Upload digest
         uses: actions/upload-artifact@v4
@@ -75,7 +82,9 @@ jobs:
     if: github.ref_type == 'tag' || github.ref_name == 'master'
 
     steps:
-      - name: Download all digests
+      - uses: actions/checkout@v4
+
+      - name: Download digests
         uses: actions/download-artifact@v4
         with:
           path: ${{ runner.temp }}/digests
@@ -92,20 +101,20 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Group and create manifests
+      - name: Docker meta (again)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=raw,value=1.87.0-debug
+            type=raw,value=1.87.0-release
+
+      - name: Create and push manifest
         working-directory: ${{ runner.temp }}/digests
         run: |
-          for combo in $(ls digests-* | sed 's/^digests-\(.*\)-linux-.*/\1/' | sort -u); do
-            echo "::group::Creating manifest for $combo"
-            files=$(ls digests-${combo}-* 2>/dev/null || true)
-            if [ -z "$files" ]; then
-              echo "⚠️  Skipping $combo – no digests found"
-              echo "::endgroup::"
-              continue
-            fi
-            digests=$(cat $files | tr '\n' ' ')
-            docker buildx imagetools create $digests \
-              -t ${{ env.REGISTRY_IMAGE }}:${combo}
-            docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${combo}
-            echo "::endgroup::"
-          done
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+
+      - name: Inspect
+        run: docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }}
