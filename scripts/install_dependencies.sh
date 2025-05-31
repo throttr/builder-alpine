@@ -37,7 +37,9 @@ apk add --no-cache \
     libtool \
     m4 \
     curl-static \
-    openssl-libs-static
+    openssl-libs-static \
+    nghttp2-dev \
+    nghttp2-static
 
 ln -sf /usr/share/zoneinfo/${TZ:-UTC} /etc/localtime
 echo "${TZ:-UTC}" > /etc/timezone
