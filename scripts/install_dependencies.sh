@@ -33,13 +33,14 @@ apk add --no-cache \
     gcovr \
     lcov \
     autoconf \
-    automake \
-    libtool \
-    m4 \
     curl-static \
     openssl-libs-static \
     nghttp2-dev \
-    nghttp2-static
+    nghttp2-static \
+    brotli-static \
+    libidn2-static \
+    libpsl-static \
+    libunistring-static
 
 ln -sf /usr/share/zoneinfo/${TZ:-UTC} /etc/localtime
 echo "${TZ:-UTC}" > /etc/timezone
