@@ -35,7 +35,9 @@ apk add --no-cache \
     autoconf \
     automake \
     libtool \
-    m4
+    m4 \
+    curl-static \
+    openssl-libs-static
 
 ln -sf /usr/share/zoneinfo/${TZ:-UTC} /etc/localtime
 echo "${TZ:-UTC}" > /etc/timezone
