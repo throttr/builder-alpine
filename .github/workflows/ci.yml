@@ -93,11 +93,16 @@ jobs:
       - name: Group and create manifests
         working-directory: ${{ runner.temp }}/digests
         run: |
-          for combo in $(ls | cut -d'-' -f1,2 | sort -u); do
+          for combo in $(ls digests-* | sed 's/^digests-\(.*\)-linux-.*/\1/' | sort -u); do
             echo "::group::Creating manifest for $combo"
-            digests=$(ls digests-${combo}-* | xargs cat | tr '\n' ' ')
-            docker buildx imagetools create \
-              $digests \
+            files=$(ls digests-${combo}-* 2>/dev/null || true)
+            if [ -z "$files" ]; then
+              echo "⚠️  Skipping $combo – no digests found"
+              echo "::endgroup::"
+              continue
+            fi
+            digests=$(cat $files | tr '\n' ' ')
+            docker buildx imagetools create $digests \
               -t ${{ env.REGISTRY_IMAGE }}:${combo}
             docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${combo}
             echo "::endgroup::"
